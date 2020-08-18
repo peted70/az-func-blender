@@ -20,15 +20,13 @@ python3-dev python3-pip libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 unzip
 
 # get the dependencies for the script
 RUN mkdir -p /local/
-#COPY background_job.py /local/background_job.py
+COPY objmat.py /local/objmat.py
 
 # get the blender 2.81a and setup the paths
 RUN cd /tmp && wget -q https://download.blender.org/release/Blender2.83/blender-2.83.4-linux64.tar.xz \
 && ls -al \
-&& tar xvf /tmp/blender-2.83.4-linux64.tar.xz -C /usr/bin/ 
-
-# \
-# && rm -r /tmp/blender-2.83.4-linux64.tar.xz
+&& tar xvf /tmp/blender-2.83.4-linux64.tar.xz -C /usr/bin/ \
+&& rm -r /tmp/blender-2.83.4-linux64.tar.xz
 
 # copy the shared lib for blender
 RUN cp /usr/bin/blender-2.83.4-linux64/lib/lib* /usr/local/lib/ && ldconfig

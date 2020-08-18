@@ -20,7 +20,7 @@ python3-dev python3-pip libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 unzip
 
 # get the dependencies for the script
 RUN mkdir -p /local/
-COPY objmat.py /local/objmat.py
+ADD scripts /local/scripts/
 
 # get the blender 2.81a and setup the paths
 RUN cd /tmp && wget -q https://download.blender.org/release/Blender2.83/blender-2.83.4-linux64.tar.xz \

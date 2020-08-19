@@ -11,9 +11,37 @@ using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Net.Http;
 using System.IO.Compression;
+using Microsoft.Net.Http.Headers;
+using System.Reflection;
 
 namespace AzFuncDocker
 {
+    public static class ZipArchiveExtension 
+    {
+        public static void CreateEntryFromAny(this ZipArchive archive, string sourceName, string entryName = "") 
+        {
+            var fileName = Path.GetFileName(sourceName);
+            if (File.GetAttributes(sourceName).HasFlag(FileAttributes.Directory)) 
+            {
+                archive.CreateEntryFromDirectory(sourceName, Path.Combine(entryName, fileName));
+            } 
+            else 
+            {
+                archive.CreateEntryFromFile(sourceName, Path.Combine(entryName, fileName), CompressionLevel.Fastest);
+            }
+        }
+
+        public static void CreateEntryFromDirectory(this ZipArchive archive, string sourceDirName, string entryName = "") 
+        {
+            string[] files = Directory.GetFiles(sourceDirName).Concat(Directory.GetDirectories(sourceDirName)).ToArray();
+            archive.CreateEntry(Path.Combine(entryName, Path.GetFileName(sourceDirName)));
+            foreach (var file in files) 
+            {
+                archive.CreateEntryFromAny(file, entryName);
+            }
+        }
+    }
+
     internal class PostData
     {
         public Uri InputZipUri { get; set; }
@@ -31,14 +59,19 @@ namespace AzFuncDocker
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
             ILogger log)
         {
-            var content = await new StreamReader(req.Body).ReadToEndAsync();    
+            var workingDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            var root = Path.GetPathRoot(workingDir);
+
+            log.LogInformation($"working dir = {workingDir}");
+
+            var content = await new StreamReader(req.Body).ReadToEndAsync();
             var postData = JsonConvert.DeserializeObject<PostData>(content);
 
             var http = new HttpClient();
             var response = await http.GetAsync(postData.InputZipUri);
 
             var za = new ZipArchive(await response.Content.ReadAsStreamAsync(), ZipArchiveMode.Read);
-            var zipDir = "/tmp/objzip/" + Guid.NewGuid();
+            var zipDir = root + "tmp/objzip/" + Guid.NewGuid();
             za.ExtractToDirectory(zipDir, true);
 
             // find the obj file in the root..
@@ -54,38 +87,21 @@ namespace AzFuncDocker
 
             log.LogInformation(Directory.GetCurrentDirectory());
 
-            Directory.SetCurrentDirectory("/tmp");
-            var files = Directory.GetFiles(Directory.GetCurrentDirectory());
-            log.LogInformation(string.Join(" ", files));
-
-            try
-            {
-                Directory.SetCurrentDirectory("/usr/bin/");
-            }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "Set Directory: " + ex.Message);
-            }
-
-            files = Directory.GetFiles(Directory.GetCurrentDirectory());
-
-            log.LogInformation(string.Join(" ", files));
-
             if (File.Exists("/usr/bin/blender-2.83.4-linux64/blender"))
                 log.LogInformation("found exe");
 
             ProcessStartInfo processInfo = null;
-            try 
+            try
             {
-                var commandArguments = "-b -P objmat.py -- -i " +  ObjFilePathParameter + " -o " + OutputFormatParameter;
+                var commandArguments = "-b -P /local/scripts/objmat.py -- -i " + ObjFilePathParameter + " -o " + OutputFormatParameter;
                 processInfo = new ProcessStartInfo("/usr/bin/blender-2.83.4-linux64/blender", commandArguments);
-
-                //processInfo = new ProcessStartInfo("/usr/bin/blender-2.83.4-linux64/blender", "--version");
             }
             catch (Exception ex)
             {
                 log.LogError(ex, "ProcessStartInfo: " + ex.Message);
             }
+
+            log.LogInformation(string.Join(" ", DirectoryInWhichToSearch.GetFiles().Select(fi => fi.FullName)));
 
             processInfo.CreateNoWindow = true;
             processInfo.UseShellExecute = false;
@@ -94,7 +110,7 @@ namespace AzFuncDocker
             processInfo.RedirectStandardOutput = true;
 
             Process process = null;
-            try 
+            try
             {
                 process = Process.Start(processInfo);
             }
@@ -103,21 +119,32 @@ namespace AzFuncDocker
                 log.LogError(ex, "Process.Start: " + ex.Message);
             }
 
-            // Read the output (or the error)
-            string output = process.StandardOutput.ReadToEnd();
-            string err = process.StandardError.ReadToEnd();
-            process.WaitForExit();
+            string output = string.Empty;
+            string err = string.Empty;
+
+            if (process != null)
+            { 
+                // Read the output (or the error)
+                output = process.StandardOutput.ReadToEnd();
+                err = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+            }
 
             string responseMessage = "Standard Output: " + output;
             responseMessage += "\n\nStandard Error: " + err;
 
-            // If we get this far we might have som ebinary output so write it to a zip archive and retun
+            // If we get this far we might have some binary output so write it to a zip archive and retun
             //
-            var fs = new FileStream(Path.Combine(zipDir, "Ouput.zip"), FileMode.OpenOrCreate);
-            var OutputZip = new ZipArchive(fs, ZipArchiveMode.Create);
-            //OutputZip.CreateEntryFromFile()
+            using (var fs = new FileStream(Path.Combine(zipDir, "Output.zip"), FileMode.OpenOrCreate))
+            using (var OutputZip = new ZipArchive(fs, ZipArchiveMode.Create))
+            {
+                OutputZip.CreateEntryFromDirectory(zipDir);
 
-            return new OkObjectResult(responseMessage);
+                return new FileStreamResult(fs, new MediaTypeHeaderValue("text/plain"))
+                {
+                    FileDownloadName = "output.zip"
+                };
+            }
         }
     }
 }

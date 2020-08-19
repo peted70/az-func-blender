@@ -115,20 +115,24 @@ def load_obj_and_create_material(input_file, outputFormat):
         links.new(rgbSplitterNode.outputs['B'], pbdf.inputs['Metallic'])        
             
     # finally we need to export the obj again and hopefully it will have our material
-    outputDir, extension = os.path.splitext(input_file)
-    
-    outputDir += "converted/"
-    if not os.path.exists(outputDir):
-        os.makedirs(outputDir)
+    dirName = os.path.dirname(input_file)
+    dirName = os.path.join(dirName, "converted")
+    baseName = os.path.basename(input_file)
+    filenameWithoutExt, _ = os.path.splitext(baseName)
+
+    if not os.path.exists(dirName):
+        os.makedirs(dirName)
 
     outputFormat = outputFormat.lower()
 
+    outpathWithoutExt = os.path.join(dirName, filenameWithoutExt + '_converted')
+
     if outputFormat == 'gltf':
-        output_file = outputDir + '_converted' + '.gltf'
+        output_file = outpathWithoutExt + '.gltf'
         print('Output File = ' + output_file)
         bpy.ops.export_scene.gltf(filepath=output_file,export_format='GLTF_SEPARATE',export_image_format='JPEG')
     elif outputFormat == 'obj':
-        output_file = outputDir + '_converted' + '.obj'
+        output_file = outpathWithoutExt + '.obj'
         print('Output File = ' + output_file)
         bpy.ops.export_scene.obj(filepath=output_file)
 

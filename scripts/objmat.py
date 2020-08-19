@@ -117,7 +117,7 @@ def load_obj_and_create_material(input_file, outputFormat):
     # finally we need to export the obj again and hopefully it will have our material
     outputDir, extension = os.path.splitext(input_file)
     
-    outputDir += "converted/";
+    outputDir += "converted/"
     if not os.path.exists(outputDir):
         os.makedirs(outputDir)
 

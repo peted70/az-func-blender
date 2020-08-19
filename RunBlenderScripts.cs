@@ -133,14 +133,17 @@ namespace AzFuncDocker
             string responseMessage = "Standard Output: " + output;
             responseMessage += "\n\nStandard Error: " + err;
 
+            var outputDir = Path.Combine(zipDir, "converted");
+
             // If we get this far we might have some binary output so write it to a zip archive and retun
             //
             using (var fs = new FileStream(Path.Combine(zipDir, "Output.zip"), FileMode.OpenOrCreate))
             using (var OutputZip = new ZipArchive(fs, ZipArchiveMode.Create))
             {
-                OutputZip.CreateEntryFromDirectory(zipDir);
+                OutputZip.CreateEntryFromDirectory(outputDir);
+                log.LogInformation("Created output zip archive");
 
-                return new FileStreamResult(fs, new MediaTypeHeaderValue("text/plain"))
+                return new FileStreamResult(fs, new MediaTypeHeaderValue("application/zip"))
                 {
                     FileDownloadName = "output.zip"
                 };

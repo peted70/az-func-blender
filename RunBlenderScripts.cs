@@ -56,22 +56,51 @@ namespace AzFuncDocker
         //
         [FunctionName("RunBlenderScripts")]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", "get", Route = null)] HttpRequest req,
             ILogger log)
         {
+            PostData data = new PostData();
+
+            if (req.Method == "GET")
+            {
+                var inputZip = req.Query["InputZipUri"];
+                if (!string.IsNullOrEmpty(inputZip))
+                {
+                    data.InputZipUri = new Uri(inputZip);
+                    var format = req.Query["OutputFormat"];
+                    if (!string.IsNullOrEmpty(format))
+                        data.OutputFormat = format;
+                }
+            }
+            else if (req.Method == "POST")
+            {
+                var content = await new StreamReader(req.Body).ReadToEndAsync();
+                data = JsonConvert.DeserializeObject<PostData>(content);
+            }
+
             var workingDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var root = Path.GetPathRoot(workingDir);
 
             log.LogInformation($"working dir = {workingDir}");
 
-            var content = await new StreamReader(req.Body).ReadToEndAsync();
-            var postData = JsonConvert.DeserializeObject<PostData>(content);
-
             var http = new HttpClient();
-            var response = await http.GetAsync(postData.InputZipUri);
+            log.LogInformation($"HTTP GET = {data.InputZipUri.ToString()}");
+
+            HttpResponseMessage response = null;
+            try
+            {
+                response = await http.GetAsync(data.InputZipUri);
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "Http failure");
+            }
 
             var za = new ZipArchive(await response.Content.ReadAsStreamAsync(), ZipArchiveMode.Read);
             var zipDir = root + "tmp/objzip/" + Guid.NewGuid();
+
+            log.LogInformation($"zip dir = {zipDir}");
+
             za.ExtractToDirectory(zipDir, true);
 
             // find the obj file in the root..
@@ -80,7 +109,7 @@ namespace AzFuncDocker
 
             // objFilePath parameter
             var ObjFilePathParameter = objFile.FullName;
-            var OutputFormatParameter = postData.OutputFormat;
+            var OutputFormatParameter = data.OutputFormat;
 
             log.LogInformation("C# HTTP trigger function processed a request.");
             log.LogInformation("We have life!");
@@ -94,6 +123,7 @@ namespace AzFuncDocker
             try
             {
                 var commandArguments = "-b -P /local/scripts/objmat.py -- -i " + ObjFilePathParameter + " -o " + OutputFormatParameter;
+                log.LogInformation($"commandArguments = {commandArguments}");
                 processInfo = new ProcessStartInfo("/usr/bin/blender-2.83.4-linux64/blender", commandArguments);
             }
             catch (Exception ex)
@@ -123,7 +153,7 @@ namespace AzFuncDocker
             string err = string.Empty;
 
             if (process != null)
-            { 
+            {
                 // Read the output (or the error)
                 output = process.StandardOutput.ReadToEnd();
                 err = process.StandardError.ReadToEnd();
@@ -134,6 +164,8 @@ namespace AzFuncDocker
             responseMessage += "\n\nStandard Error: " + err;
 
             var outputDir = Path.Combine(zipDir, "converted");
+            var exists = Directory.Exists(outputDir) ? "yes" : "no";
+            log.LogInformation($"Does output directory exist? {exists}");
 
             // If we get this far we might have some binary output so write it to a zip archive and retun
             //

@@ -11,43 +11,10 @@ using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Net.Http;
 using System.IO.Compression;
-using Microsoft.Net.Http.Headers;
 using System.Reflection;
 
 namespace AzFuncDocker
 {
-    public static class ZipArchiveExtension 
-    {
-        public static void CreateEntryFromAny(this ZipArchive archive, string sourceName, string entryName = "") 
-        {
-            var fileName = Path.GetFileName(sourceName);
-            if (File.GetAttributes(sourceName).HasFlag(FileAttributes.Directory)) 
-            {
-                archive.CreateEntryFromDirectory(sourceName, Path.Combine(entryName, fileName));
-            } 
-            else 
-            {
-                archive.CreateEntryFromFile(sourceName, Path.Combine(entryName, fileName), CompressionLevel.Fastest);
-            }
-        }
-
-        public static void CreateEntryFromDirectory(this ZipArchive archive, string sourceDirName, string entryName = "") 
-        {
-            string[] files = Directory.GetFiles(sourceDirName).Concat(Directory.GetDirectories(sourceDirName)).ToArray();
-            archive.CreateEntry(Path.Combine(entryName, Path.GetFileName(sourceDirName)));
-            foreach (var file in files) 
-            {
-                archive.CreateEntryFromAny(file, entryName);
-            }
-        }
-    }
-
-    internal class PostData
-    {
-        public Uri InputZipUri { get; set; }
-        public string OutputFormat { get; set; }
-    }
-
     public static class RunBlenderScripts
     {
         // Pass in an input parameter url to a zip file and an output parameter specifying the output format 
@@ -59,24 +26,10 @@ namespace AzFuncDocker
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", "get", Route = null)] HttpRequest req,
             ILogger log)
         {
-            PostData data = new PostData();
-
-            if (req.Method == "GET")
-            {
-                var inputZip = req.Query["InputZipUri"];
-                if (!string.IsNullOrEmpty(inputZip))
-                {
-                    data.InputZipUri = new Uri(inputZip);
-                    var format = req.Query["OutputFormat"];
-                    if (!string.IsNullOrEmpty(format))
-                        data.OutputFormat = format;
-                }
-            }
-            else if (req.Method == "POST")
-            {
-                var content = await new StreamReader(req.Body).ReadToEndAsync();
-                data = JsonConvert.DeserializeObject<PostData>(content);
-            }
+            // Abstract handling the request parameters. I have set this up to use a GET or a POST for 
+            // convenience of testing..
+            //
+            var data = await ProcessParameters(req);
 
             var workingDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var root = Path.GetPathRoot(workingDir);
@@ -166,20 +119,68 @@ namespace AzFuncDocker
             var outputDir = Path.Combine(zipDir, "converted");
             var exists = Directory.Exists(outputDir) ? "yes" : "no";
             log.LogInformation($"Does output directory exist? {exists}");
-
-            // If we get this far we might have some binary output so write it to a zip archive and retun
-            //
-            using (var fs = new FileStream(Path.Combine(zipDir, "Output.zip"), FileMode.OpenOrCreate))
-            using (var OutputZip = new ZipArchive(fs, ZipArchiveMode.Create))
+            log.LogInformation($"Output directory {outputDir}");
+            string[] files = Directory.GetFiles(outputDir).Concat(Directory.GetDirectories(outputDir)).ToArray();
+            foreach (var file in files)
             {
-                OutputZip.CreateEntryFromDirectory(outputDir);
-                log.LogInformation("Created output zip archive");
-
-                return new FileStreamResult(fs, new MediaTypeHeaderValue("application/zip"))
-                {
-                    FileDownloadName = "output.zip"
-                };
+                log.LogInformation(file);
             }
+
+
+            // If we want to write the zip to disk then we can use a FileStream here and also
+            // replace the FileStreamResult with a PhysicalFileResult (see below)
+            //
+            // using (var stream = new FileStream(filePath, FileMode.OpenOrCreate))
+
+            // The memory stream will be disposed by the FileStreamResult
+            //
+            var stream = new MemoryStream();
+
+            // Ensure using true for the leaveOpen parameter otherwise the memory stream will
+            // get disposed before w are done with it.
+            //
+            using (var OutputZip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+            {
+                OutputZip.CreateEntryFromDirectory(zipDir);
+            }
+
+            // Rewind
+            //
+            stream.Position = 0;
+
+            return new FileStreamResult(stream, System.Net.Mime.MediaTypeNames.Application.Zip)
+            {
+                FileDownloadName = "3DModel.zip"
+            };
+
+            //result = new PhysicalFileResult(filePath, new MediaTypeHeaderValue("application/zip"))
+            //{
+            //    FileDownloadName = "output.zip"
+            //};
+        }
+
+        private static async Task<PostData> ProcessParameters(HttpRequest req)
+        {
+            PostData data = new PostData();
+
+            if (req.Method == "GET")
+            {
+                var inputZip = req.Query["InputZipUri"];
+                if (!string.IsNullOrEmpty(inputZip))
+                {
+                    data.InputZipUri = new Uri(inputZip);
+                    var format = req.Query["OutputFormat"];
+                    if (!string.IsNullOrEmpty(format))
+                        data.OutputFormat = format;
+                }
+            }
+            else if (req.Method == "POST")
+            {
+                var content = await new StreamReader(req.Body).ReadToEndAsync();
+                data = JsonConvert.DeserializeObject<PostData>(content);
+            }
+
+            return data;
         }
     }
 }

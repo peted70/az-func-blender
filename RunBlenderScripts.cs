@@ -12,11 +12,16 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.IO.Compression;
 using System.Reflection;
+using System.Net;
 
 namespace AzFuncDocker
 {
     public static class RunBlenderScripts
     {
+        // Location of the blender executable in the container
+        //
+        const string BlenderExeLocation = @"/usr/bin/blender-2.83.4-linux64/blender";
+
         // Pass in an input parameter url to a zip file and an output parameter specifying the output format 
         // Example command line to build:
         // blender -b -P objmat.py -- -i "C:\Users\peted\3D Objects\Gold.obj" -o gltf
@@ -36,27 +41,39 @@ namespace AzFuncDocker
 
             log.LogInformation($"working dir = {workingDir}");
 
-            var http = new HttpClient();
-            log.LogInformation($"HTTP GET = {data.InputZipUri.ToString()}");
-
+            // Download the zip file containing the payload.
+            //
             HttpResponseMessage response = null;
-            try
+            using (var http = new HttpClient())
             {
-                response = await http.GetAsync(data.InputZipUri);
-            }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "Http failure");
+                log.LogInformation($"HTTP GET = {data.InputZipUri}");
+
+                try
+                {
+                    response = await http.GetAsync(data.InputZipUri);
+                }
+                catch (HttpRequestException hex)
+                {
+                    log.LogError(hex, $"Request to {data.InputZipUri} Failed");
+                }
+                catch (Exception ex)
+                {
+                    log.LogError(ex, $"Request to {data.InputZipUri} Failed");
+                }
             }
 
-            var za = new ZipArchive(await response.Content.ReadAsStreamAsync(), ZipArchiveMode.Read);
+            // Extract the input zip archive into a temp location
+            //
             var zipDir = root + "tmp/objzip/" + Guid.NewGuid();
-
             log.LogInformation($"zip dir = {zipDir}");
 
-            za.ExtractToDirectory(zipDir, true);
+            using (var za = new ZipArchive(await response.Content.ReadAsStreamAsync(), ZipArchiveMode.Read))
+            {
+                za.ExtractToDirectory(zipDir, true);
+            }
 
-            // find the obj file in the root..
+            // find the obj file in the root of the extracted archive
+            //
             DirectoryInfo DirectoryInWhichToSearch = new DirectoryInfo(zipDir);
             FileInfo objFile = DirectoryInWhichToSearch.GetFiles("*.obj").Single();
 
@@ -64,27 +81,24 @@ namespace AzFuncDocker
             var ObjFilePathParameter = objFile.FullName;
             var OutputFormatParameter = data.OutputFormat;
 
-            log.LogInformation("C# HTTP trigger function processed a request.");
-            log.LogInformation("We have life!");
-
-            log.LogInformation(Directory.GetCurrentDirectory());
-
-            if (File.Exists("/usr/bin/blender-2.83.4-linux64/blender"))
-                log.LogInformation("found exe");
+            if (!File.Exists(BlenderExeLocation))
+            {
+                log.LogInformation($"Unable to locate Blender executable {BlenderExeLocation}");
+                return new StatusCodeResult((int)HttpStatusCode.InternalServerError);
+            }
 
             ProcessStartInfo processInfo = null;
             try
             {
                 var commandArguments = "-b -P /local/scripts/objmat.py -- -i " + ObjFilePathParameter + " -o " + OutputFormatParameter;
                 log.LogInformation($"commandArguments = {commandArguments}");
-                processInfo = new ProcessStartInfo("/usr/bin/blender-2.83.4-linux64/blender", commandArguments);
+                processInfo = new ProcessStartInfo(BlenderExeLocation, commandArguments);
             }
             catch (Exception ex)
             {
                 log.LogError(ex, "ProcessStartInfo: " + ex.Message);
+                return new StatusCodeResult((int)HttpStatusCode.InternalServerError);
             }
-
-            log.LogInformation(string.Join(" ", DirectoryInWhichToSearch.GetFiles().Select(fi => fi.FullName)));
 
             processInfo.CreateNoWindow = true;
             processInfo.UseShellExecute = false;
@@ -92,7 +106,7 @@ namespace AzFuncDocker
             processInfo.RedirectStandardError = true;
             processInfo.RedirectStandardOutput = true;
 
-            Process process = null;
+            Process process;
             try
             {
                 process = Process.Start(processInfo);
@@ -100,6 +114,7 @@ namespace AzFuncDocker
             catch (Exception ex)
             {
                 log.LogError(ex, "Process.Start: " + ex.Message);
+                return new StatusCodeResult((int)HttpStatusCode.InternalServerError);
             }
 
             string output = string.Empty;
@@ -113,19 +128,22 @@ namespace AzFuncDocker
                 process.WaitForExit();
             }
 
-            string responseMessage = "Standard Output: " + output;
-            responseMessage += "\n\nStandard Error: " + err;
+            log.LogInformation($"Standard Output: {output}");
+            log.LogInformation($"Standard Error: {err}");
 
             var outputDir = Path.Combine(zipDir, "converted");
-            var exists = Directory.Exists(outputDir) ? "yes" : "no";
-            log.LogInformation($"Does output directory exist? {exists}");
+            if (!Directory.Exists(outputDir))
+            {
+                log.LogError($"Output directory {outputDir} does not exist");
+                return new StatusCodeResult((int)HttpStatusCode.InternalServerError);
+            }
+
             log.LogInformation($"Output directory {outputDir}");
             string[] files = Directory.GetFiles(outputDir).Concat(Directory.GetDirectories(outputDir)).ToArray();
             foreach (var file in files)
             {
                 log.LogInformation(file);
             }
-
 
             // If we want to write the zip to disk then we can use a FileStream here and also
             // replace the FileStreamResult with a PhysicalFileResult (see below)

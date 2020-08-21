@@ -20,7 +20,9 @@ namespace AzFuncDocker
     {
         // Location of the blender executable in the container
         //
-        const string BlenderExeLocation = @"/usr/bin/blender-2.83.4-linux64/blender";
+        private const string BlenderExeLocation = @"/usr/bin/blender-2.83.4-linux64/blender";
+        private const string ArchiveName = "3DModel.zip";
+        private const string TempRootDir = "tmp/objzip/";
 
         // Pass in an input parameter url to a zip file and an output parameter specifying the output format 
         // Example command line to build:
@@ -64,7 +66,7 @@ namespace AzFuncDocker
 
             // Extract the input zip archive into a temp location
             //
-            var zipDir = root + "tmp/objzip/" + Guid.NewGuid();
+            var zipDir = root + TempRootDir + Guid.NewGuid();
             log.LogInformation($"zip dir = {zipDir}");
 
             using (var za = new ZipArchive(await response.Content.ReadAsStreamAsync(), ZipArchiveMode.Read))
@@ -87,7 +89,7 @@ namespace AzFuncDocker
                 return new StatusCodeResult((int)HttpStatusCode.InternalServerError);
             }
 
-            ProcessStartInfo processInfo = null;
+            ProcessStartInfo processInfo;
             try
             {
                 var commandArguments = "-b -P /local/scripts/objmat.py -- -i " + ObjFilePathParameter + " -o " + OutputFormatParameter;
@@ -168,7 +170,7 @@ namespace AzFuncDocker
 
             return new FileStreamResult(stream, System.Net.Mime.MediaTypeNames.Application.Zip)
             {
-                FileDownloadName = "3DModel.zip"
+                FileDownloadName = ArchiveName
             };
 
             //result = new PhysicalFileResult(filePath, new MediaTypeHeaderValue("application/zip"))
@@ -200,5 +202,12 @@ namespace AzFuncDocker
 
             return data;
         }
+    }
+
+    public class BlenderCommandProcessor
+    {
+        private const string CommandStart = "-b -P /local/scripts/";
+        private const string CommandSeperator = "--";
+        
     }
 }

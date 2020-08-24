@@ -70,6 +70,35 @@ One last tip is to point you at the VS Code Extension for Blender Development.
 
 ![VS Code Extension](./images/vscode-ext.png)
 
+## Example Content Pipeline Script
+
+I'll now present the example script I'm going to use for this post.
+
+The script is an example of how you can run blender from the command line (in background mode with no interface) to automate tasks. This example will
+
+> - load a .obj file
+> - load albedo, normal and ambient occlusion/roughness/metallic maps
+> - create a Principled BSDF material using those textures as input
+> - output the file as either an obj + obj material (without the PBR textures since those are unsupported in obj format) or a glTF file with the PBR textures assigned.
+
+For now, to run this you would need to have blender installed and it's executable location in your PATH. Then you can run it like this where all args after the -- are passed to the script. File output options are currently gltf and obj.
+
+```bat
+blender -b -P objmat.py -- -i "C:\Users\peted\3D Objects\Gold.obj" -o gltf
+```
+
+The result should be a copy of the file in a folder named *converted* with *_converted* appended to the filename and with an additional .mtl file in the same folder as the original file. Alternatively, there will be a glTF file there which references the loose textures. The script recursively searches folders from the original file location looking for textures by name, i.e. albedo, normal and orm. There is a distinct lack of error handling as I just wanted to use this as a handy example.
+
+Notes. Some 3D software supports an ORM map in an obj material by adding the line
+
+> map_ORM ORM.png
+
+to the .mtl file. This is non-standard and un-supported by some 3D tools. For this kind of PBR support glTF can be used.
+
+To be honest it doesn't really matter what the script does but more that we can show a script which takes some input and process it to be provide our required output and I have this script written and tested already.  
+
+<show example images of running the script on the desktop and provide some sample input>
+
 
 A little bit about WSL:Ubuntu VS code
 

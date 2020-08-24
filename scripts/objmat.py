@@ -1,17 +1,13 @@
 # This script is an example of how you can run blender from the command line
-# (in background mode with no interface) to automate tasks, in this example it
-# creates a text object, camera and light, then renders and/or saves it.
-# This example also shows how you can parse command line options to scripts.
+# (in background mode with no interface) to automate tasks. This example will
+# load an obj file along with albedo, normal and 
+# ambient occlusion/roughness/metallic maps, create a Principled BSDF material 
+# using those textures as input and output the file as eiter an obj + obj material
+# (without the PBR textures since those are unsupported in obj format) or
+# a glTF file with the PBR textures assigned.
 #
 # Example usage for this test.
-#  blender --background --factory-startup --python $HOME/background_job.py -- \
-#          --text="Hello World" \
-#          --render="/tmp/hello" \
-#          --save="/tmp/hello.blend"
-#
-# Notice:
-# '--factory-startup' is used to avoid the user default settings from
-#                     interfering with automated scene generation.
+# blender -b -P objmat.py -- -i "C:\Users\peted\3D Objects\Gold.obj" -o gltf
 #
 # '--' causes blender to ignore all following arguments so python can use them.
 #
@@ -22,6 +18,15 @@ import bpy
 import os
 
 formats = ['obj', 'gltf']
+
+def IsAlbedo(filename):
+    return 'albedo' in filename or 'basecolor' in filename
+
+def IsNormal(filename):
+    return 'normal' in filename
+
+def IsORM(filename):
+    return 'orm' in filename or 'occlusionroughnessmetallic' in filename
 
 def load_obj_and_create_material(input_file, outputFormat):
 
@@ -69,23 +74,25 @@ def load_obj_and_create_material(input_file, outputFormat):
     ORMFile = ''
 
     # we want to locate and load image by name so albedo, normal and ORM
-    for dirpath, dirs, files in os.walk(os.path.dirname(input_file)):
+    for dirpath, _, files in os.walk(os.path.dirname(input_file)):
         for filename in files:
-            if filename.lower().endswith('.png'):
+            filenameLower = filename.lower()
+            if filenameLower.endswith('.png'):
                 print(filename)
-                if ('albedo' in filename.lower()):
-                    albedoFile = os.path.join(dirpath, filename)
-                elif ('normal' in filename.lower()):
-                    normalFile = os.path.join(dirpath, filename)
-                elif ('orm' in filename.lower()):
-                    ORMFile = os.path.join(dirpath, filename)
+                if IsAlbedo(filenameLower):
+                    albedoFile = os.path.abspath(os.path.join(dirpath, filename))
+                elif IsNormal(filenameLower):
+                    normalFile = os.path.abspath(os.path.join(dirpath, filename))
+                elif IsORM(filenameLower):
+                    ORMFile = os.path.abspath(os.path.join(dirpath, filename))
+
+    links = node_tree.links
 
     if albedoFile:
         # Create albedo node and wire it up
         img = bpy.data.images.load(albedoFile)
         albedoNode = newmat.node_tree.nodes.new(type='ShaderNodeTexImage')
         albedoNode.image = img
-        links = node_tree.links
         links.new(albedoNode.outputs['Color'], pbdf.inputs['Base Color'])
 
     if normalFile:

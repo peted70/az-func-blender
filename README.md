@@ -84,7 +84,7 @@ The script is an example of how you can run blender from the command line (in ba
 For now, to run this you would need to have blender installed and it's executable location in your PATH. Then you can run it like this where all args after the -- are passed to the script. File output options are currently gltf and obj.
 
 ```bat
-blender -b -P objmat.py -- -i "C:\Users\peted\3D Objects\Gold.obj" -o gltf
+blender -b -P ./scripts/objmat.py -- -i ./TestModels/barramundi.obj -o gltf
 ```
 
 The result should be a copy of the file in a folder named *converted* with *_converted* appended to the filename and with an additional .mtl file in the same folder as the original file. Alternatively, there will be a glTF file there which references the loose textures. The script recursively searches folders from the original file location looking for textures by name, i.e. albedo, normal and orm. There is a distinct lack of error handling as I just wanted to use this as a handy example.
@@ -95,13 +95,156 @@ Notes. Some 3D software supports an ORM map in an obj material by adding the lin
 
 to the .mtl file. This is non-standard and un-supported by some 3D tools. For this kind of PBR support glTF can be used.
 
-To be honest it doesn't really matter what the script does but more that we can show a script which takes some input and process it to be provide our required output and I have this script written and tested already.  
+To be honest it doesn't really matter what the script does as long as we can show a script which takes some input and process it to provide some measurable output, and I have this script written and tested already.  
 
-<show example images of running the script on the desktop and provide some sample input>
+Here's the script being run from the command line and also showing the output:
+
+![Blender script running](./images/blender-script.gif)
+
+> The sample input is provided in the Github repo
+
+Here's the main part of the script:
+
+``` python
+def load_obj_and_create_material(input_file, outputFormat):
+
+    # Clear existing objects.
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    
+    # Clear the current scene - useful if we want to run inside blender and retain preferences
+    # for item in bpy.context.scene.objects:
+    #    bpy.data.objects.remove(item, do_unlink=True)
+    bpy.ops.import_scene.obj(filepath=input_file)
+    
+    #obj_object = bpy.context.selected_objects[0] ####<--Fix
+    # make sure to get all imported objects
+    obs = [ o for o in bpy.context.scene.objects if o.select_get() ]
+
+    print('Imported objects: count = ' + str(len(obs)))
+    for ob in obs:
+        print(ob.name)
+
+    numImportedPolygons = 0
+    for ob in obs:
+        numImportedPolygons += len(ob.data.polygons)
+        
+    print('Number of imported polygons = ' + str(numImportedPolygons))
+
+    newmat = bpy.data.materials.new('newmat')
+    newmat.use_nodes = True
+    node_tree = newmat.node_tree
+
+    # asign the new material to each imported mesh
+    for ob in obs:
+        # Assign it to object
+        if ob.data.materials:
+            # assign to 1st material slot
+            ob.data.materials[0] = newmat
+        else:
+            # no slots
+            ob.data.materials.append(newmat)
+
+    nodes = node_tree.nodes
+    pbdf = nodes.get("Principled BSDF")
+    
+    albedoFile = ''
+    normalFile = ''
+    ORMFile = ''
+
+    # we want to locate and load image by name so albedo, normal and ORM
+    for dirpath, _, files in os.walk(os.path.dirname(input_file)):
+        for filename in files:
+            filenameLower = filename.lower()
+            if filenameLower.endswith('.png'):
+                print(filename)
+                if IsAlbedo(filenameLower):
+                    albedoFile = os.path.abspath(os.path.join(dirpath, filename))
+                elif IsNormal(filenameLower):
+                    normalFile = os.path.abspath(os.path.join(dirpath, filename))
+                elif IsORM(filenameLower):
+                    ORMFile = os.path.abspath(os.path.join(dirpath, filename))
+
+    links = node_tree.links
+
+    if albedoFile:
+        # Create albedo node and wire it up
+        img = bpy.data.images.load(albedoFile)
+        albedoNode = newmat.node_tree.nodes.new(type='ShaderNodeTexImage')
+        albedoNode.image = img
+        links.new(albedoNode.outputs['Color'], pbdf.inputs['Base Color'])
+
+    if normalFile:
+        # Create normal map node and wire it up
+        img = bpy.data.images.load(normalFile)
+        
+        normalImageNode = newmat.node_tree.nodes.new(type='ShaderNodeTexImage')
+        normalImageNode.image = img
+        normalImageNode.image.colorspace_settings.name = 'Non-Color'
+
+        normalMapNode = newmat.node_tree.nodes.new(type='ShaderNodeNormalMap')
+        links.new(normalImageNode.outputs['Color'], normalMapNode.inputs['Color'])
+        links.new(normalMapNode.outputs['Normal'], pbdf.inputs['Normal'])
+    
+    if ORMFile:    
+        # Create the ORM mapping and wire it up to the BSDF shader
+        img = bpy.data.images.load(ORMFile)
+        ormNode = newmat.node_tree.nodes.new(type='ShaderNodeTexImage')
+        ormNode.image = img
+        
+        # pipe the output from the image node into an RGB splitter node
+        rgbSplitterNode = newmat.node_tree.nodes.new(type='ShaderNodeSeparateRGB')
+        
+        links = node_tree.links
+        links.new(ormNode.outputs['Color'], rgbSplitterNode.inputs['Image'])
+        links.new(rgbSplitterNode.outputs['G'], pbdf.inputs['Roughness'])        
+        links.new(rgbSplitterNode.outputs['B'], pbdf.inputs['Metallic'])        
+            
+    # finally we need to export the obj again and hopefully it will have our material
+    dirName = os.path.dirname(input_file)
+    dirName = os.path.join(dirName, "converted")
+    baseName = os.path.basename(input_file)
+    filenameWithoutExt, _ = os.path.splitext(baseName)
+
+    if not os.path.exists(dirName):
+        os.makedirs(dirName)
+
+    outputFormat = outputFormat.lower()
+
+    outpathWithoutExt = os.path.join(dirName, filenameWithoutExt + '_converted')
+
+    if outputFormat == 'gltf':
+        output_file = outpathWithoutExt + '.gltf'
+        print('Output File = ' + output_file)
+        bpy.ops.export_scene.gltf(filepath=output_file,export_format='GLTF_SEPARATE',export_image_format='JPEG')
+    elif outputFormat == 'obj':
+        output_file = outpathWithoutExt + '.obj'
+        print('Output File = ' + output_file)
+        bpy.ops.export_scene.obj(filepath=output_file)
+```
+
+## Running on Azure
+
+So, we have our unit of processing that we can currently run from the command line. (I'm developing this on Windows but this would also run on Linux or Mac).
+
+I decided to set up a Docker container with Blender installed and a selection of python scripts copied over and ready to be called.
+
+This choice, while seemingly simple involved some trade-offs and considerations:
+
+- An Azure function hosted in a custom container requires an App Service Plan and does not run in the usual Consumption Plan providing true pay-as-you-go.
+
+- Using a container approach makes the solution flexible and the service layer can be switched more easily and the containers can be run locally on a development PC or on a local network.
+
+- Azure Container Instances presented another possible solution possibly using a Logic App or Durable Function to coordinate the containers.
+
+Either way, I decided to start first by creating a custom Docker container.
+
+
+
+Consumption Plan vs App Service Plan for Functions
+Azure Functions vs Azure Container Instances
 
 
 A little bit about WSL:Ubuntu VS code
 
-Blender also has an embedded Python interpreter
 
 <explore cost of running Azure functions - am I using consumption plan or appservice plan and what is the difference.>

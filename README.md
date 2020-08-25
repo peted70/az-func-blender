@@ -40,6 +40,8 @@ Blender can be used for 3D modeling, sculpting, creating and applying materials,
 
 So, as well as all of the rich functionality for 3D content creation we can also automate it using the Python scripting interface. Blender has an embedded Python interpretor and a Python library exposing most of the functionality. The first step would be to open the Scripting tab which can be found along the top of the application to the far right.
 
+<replace with gif>
+
 ![Blender Scripting Workspace](./images/blender-scripting.png)
 
 This configures Blender into a scripting friendly workspace where you have the following windows:
@@ -238,11 +240,165 @@ This choice, while seemingly simple involved some trade-offs and considerations:
 
 Either way, I decided to start first by creating a custom Docker container.
 
+### Docker
+
+``` Dockerfile
+FROM mcr.microsoft.com/dotnet/core/sdk:3.1 AS installer-env
+
+COPY . /src/dotnet-function-app
+RUN cd /src/dotnet-function-app && \
+    mkdir -p /home/site/wwwroot && \
+    dotnet publish *.csproj --output /home/site/wwwroot
+
+# To enable ssh & remote debugging on app service change the base image to the one below
+# FROM mcr.microsoft.com/azure-functions/dotnet:3.0-appservice
+FROM mcr.microsoft.com/azure-functions/dotnet:3.0
+ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
+    AzureFunctionsJobHost__Logging__Console__IsEnabled=true
+
+COPY --from=installer-env ["/home/site/wwwroot", "/home/site/wwwroot"]
+
+# get latest python & blender related dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends apt-utils python3 python3-virtualenv \
+python3-dev python3-pip libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 unzip wget bzip2 xz-utils \
+&& rm -rf /var/lib/apt/lists/*
+
+# get the dependencies for the script
+RUN mkdir -p /local/
+ADD scripts /local/scripts/
+
+# get the blender 2.81a and setup the paths
+RUN cd /tmp && wget -q https://download.blender.org/release/Blender2.83/blender-2.83.4-linux64.tar.xz \
+&& ls -al \
+&& tar xvf /tmp/blender-2.83.4-linux64.tar.xz -C /usr/bin/ \
+&& rm -r /tmp/blender-2.83.4-linux64.tar.xz
+
+# copy the shared lib for blender
+RUN cp /usr/bin/blender-2.83.4-linux64/lib/lib* /usr/local/lib/ && ldconfig
+
+# ENTRYPOINT ["/usr/bin/blender-2.83.4-linux64/blender", "-b", "--version"]
+```
+
+This started it's life as a result of me following the guide [here](https://docs.microsoft.com/en-us/azure/azure-functions/functions-create-function-linux-custom-image?tabs=bash%2Cportal&pivots=programming-language-csharp) which walks through creating a function hosted on Linux using a custom container.
+
+When running,
+
+```cli
+func init az-func-blender --docker
+```
+
+followed by navigating into the *az-func-blender* folder and executing
+
+```cli
+func new --name RunBlenderScripts --template "HTTP trigger"
+```
+
+You will get created a boilerplate Dockerfile and Function definition. I added to the Dockerfile:
+
+- Getting the latest python & blender related dependencies
+
+- Copying the python Blender scripts from a local folder
+
+- Downloading and installing Blender
+
+Setup up continuous integration, debugging and VScode.commnds to run locally, etc..
+
+### Azure Function Code
+
+With the error handling and logging removed to aid readability my Azure Function code looks like this:
+
+```C#
+[FunctionName("RunBlenderScripts")]
+public static async Task<IActionResult> Run(
+    [HttpTrigger(AuthorizationLevel.Anonymous, "post", "get", Route = null)] HttpRequest req,
+    ILogger log)
+{
+    var data = await ProcessParameters(req);
+
+    var workingDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+    var root = Path.GetPathRoot(workingDir);
+
+    // Download the zip file containing the payload.
+    //
+    HttpResponseMessage response = null;
+    using (var http = new HttpClient())
+    {
+        response = await http.GetAsync(data.InputZipUri);
+    }
+
+    // Extract the input zip archive into a temp location
+    //
+    var zipDir = root + TempRootDir + Guid.NewGuid();
+    using (var za = new ZipArchive(await response.Content.ReadAsStreamAsync(), ZipArchiveMode.Read))
+    {
+        za.ExtractToDirectory(zipDir, true);
+    }
+
+    // find the obj file in the root of the extracted archive
+    //
+    DirectoryInfo DirectoryInWhichToSearch = new DirectoryInfo(zipDir);
+    FileInfo objFile = DirectoryInWhichToSearch.GetFiles("*.obj").Single();
+
+    // objFilePath parameter
+    var ObjFilePathParameter = objFile.FullName;
+    var OutputFormatParameter = data.OutputFormat;
+
+    if (!File.Exists(BlenderExeLocation))
+        return new StatusCodeResult((int)HttpStatusCode.InternalServerError);
+
+    var commandArguments = "-b -P /local/scripts/objmat.py -- -i " + ObjFilePathParameter + " -o " + OutputFormatParameter;
+    log.LogInformation($"commandArguments = {commandArguments}");
+    var processInfo = new ProcessStartInfo(BlenderExeLocation, commandArguments);
+
+    processInfo.CreateNoWindow = true;
+    processInfo.UseShellExecute = false;
+
+    processInfo.RedirectStandardError = true;
+    processInfo.RedirectStandardOutput = true;
+
+    Process process = Process.Start(processInfo);
+
+    string output = string.Empty;
+    string err = string.Empty;
+
+    if (process != null)
+    {
+        // Read the output (or the error)
+        output = process.StandardOutput.ReadToEnd();
+        err = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+    }
+
+    var stream = new MemoryStream();
+
+    // Ensure using true for the leaveOpen parameter otherwise the memory stream will
+    // get disposed before w are done with it.
+    //
+    using (var OutputZip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+    {
+        OutputZip.CreateEntryFromDirectory(zipDir);
+    }
+
+    // Rewind
+    //
+    stream.Position = 0;
+
+    return new FileStreamResult(stream, System.Net.Mime.MediaTypeNames.Application.Zip)
+    {
+        FileDownloadName = ArchiveName
+    };
+}
+```
+
+> I retained support for both GET and POST for ease of testing
+
+The function requires a url input identifying the location of a zip archive which contains the input files for the Blender script. The code then unzips the archive to disk and the unzipped location is passed into the command line for Blender to run our script with the input location argument also passing the output format required. If you recall the python script writes the process output to a folder called *converted* and the contents of that folder are then added to a new zip archive and returned. 
 
 
 Consumption Plan vs App Service Plan for Functions
 Azure Functions vs Azure Container Instances
-
+VS code on WSL2 Ubuntu - filepaths
+debugging issues
 
 A little bit about WSL:Ubuntu VS code
 

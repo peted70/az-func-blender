@@ -31,12 +31,4 @@ RUN cd /tmp && wget -q https://download.blender.org/release/Blender2.83/blender-
 # copy the shared lib for blender
 RUN cp /usr/bin/blender-2.83.4-linux64/lib/lib* /usr/local/lib/ && ldconfig
 
-# Entry point for dis.co
-#WORKDIR /local/
- 
-# Test to see if we can run the script
-# RUN /usr/bin/blender-2.83.4-linux64/blender -b -E CYCLES -P background_job.py -- --text="Hello World" --render="hello"
-# CMD ["/usr/bin/blender-2.83.4-linux64/blender", "-b", "--version"]
-
-# ENTRYPOINT [ "executable" ]
 # ENTRYPOINT ["/usr/bin/blender-2.83.4-linux64/blender", "-b", "--version"]

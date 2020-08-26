@@ -42,7 +42,7 @@ So, as well as all of the rich functionality for 3D content creation we can also
 
 <replace with gif>
 
-![Blender Scripting Workspace](./images/blender-scripting.png)
+![Blender Scripting Workspace](./images/blender-scripting.gif)
 
 This configures Blender into a scripting friendly workspace where you have the following windows:
 
@@ -224,6 +224,10 @@ def load_obj_and_create_material(input_file, outputFormat):
         bpy.ops.export_scene.obj(filepath=output_file)
 ```
 
+and here's a graphical representation of how the script is setting up the PBR material.
+
+![OBJ PBR Material](./images/obj-shader.png)
+
 ## Running on Azure
 
 So, we have our unit of processing that we can currently run from the command line. (I'm developing this on Windows but this would also run on Linux or Mac).
@@ -293,7 +297,7 @@ followed by navigating into the *az-func-blender* folder and executing
 func new --name RunBlenderScripts --template "HTTP trigger"
 ```
 
-You will get created a boilerplate Dockerfile and Function definition. I added to the Dockerfile:
+You will get created a boilerplate Dockerfile and Function definition. The HTTP Trigger means I can call this from an http request but there is a range of triggers that could be used (see [Work with Azure Functions Core Tools](https://docs.microsoft.com/en-us/azure/azure-functions/functions-run-local?tabs=windows%2Ccsharp%2Cbash) for more details. I added to the Dockerfile:
 
 - Getting the latest python & blender related dependencies
 
@@ -392,11 +396,53 @@ public static async Task<IActionResult> Run(
 
 > I retained support for both GET and POST for ease of testing
 
-The function requires a url input identifying the location of a zip archive which contains the input files for the Blender script. The code then unzips the archive to disk and the unzipped location is passed into the command line for Blender to run our script with the input location argument also passing the output format required. If you recall the python script writes the process output to a folder called *converted* and the contents of that folder are then added to a new zip archive and returned. 
+The function requires a url input identifying the location of a zip archive which contains the input files for the Blender script. The code then unzips the archive to disk and the unzipped location is passed into the command line for Blender to run our script with the input location argument also passing the output format required. If you recall the python script writes the process output to a folder called *converted* and the contents of that folder are then added to a new zip archive and returned.
+
+### Development Cycle
+
+So, we have a function to call and a container to host the function. It would be useful now to understand the development cycle including; debugging, deployment and testing.
+
+#### Running Locally
+
+If working with Visual Studio Code (which I was, mostly whilst developing so will focus here) you can install a Docker extension. More info [here](https://code.visualstudio.com/docs/containers/overview) on working with containers in VS Code.
+
+![VS Code Docker Extension](./images/docker-vscode-ext.png)
+
+If we were to start in debugging session from VS Code at this point the Docker extension would throw up this error:
+
+![Docker Error Dialog](./images/no-running-containers.png)
+
+So how to run a container locally? Well, after heading to [Docker.com](https://www.docker.com/), installing Docker Desktop and becoming familiar with the command line tools I was able to run a local container mostly using the commands below:
+
+```cli
+docker build .
+docker images
+docker tag <image id> peted70/blender-functions:v1
+docker run peted70/blender-functions:v1
+docker ps
+docker exec -it <container name> /bin/bash
+```
+
+> - **Docker build** will build a container image from the Dockerfile.
+> - Using **docker images** will list all local images.
+> - **docker tag** will apply a friendly name to the image
+> - **docker run** will run a container based on the specified image
+> - **docker ps** will show running containers
+
+![Docker CLI](./images/docker-cli.gif)
+
+Once ou have a running container
+
+#### Deployment to Azure
+
+#### Testing
 
 
 Consumption Plan vs App Service Plan for Functions
 Azure Functions vs Azure Container Instances
+running containers locally, wsl2 and in the cloud.
+So, testing the AF
+
 VS code on WSL2 Ubuntu - filepaths
 debugging issues
 

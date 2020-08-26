@@ -1,6 +1,6 @@
 # Blender in Azure
 
-Blender has been receiving some well-deserved attention recently. In particular some big companies who understand the importance of this 3D content creation tool as we move towards a spatial computing-oriented landscape.
+Blender has been receiving some well-deserved attention recently. In particular some big companies (including Microsoft) who understand the importance of this 3D content creation tool as we move towards a spatial computing-oriented landscape.
 
 Blender has been hitting the news with some notable additions to the [Blender Development Fund](https://fund.blender.org/)
 
@@ -42,11 +42,9 @@ Blender can be used for 3D modeling, sculpting, creating and applying materials,
 
 So, as well as all of the rich functionality for 3D content creation we can also automate it using the Python scripting interface. Blender has an embedded Python interpretor and a Python library exposing most of the functionality. The first step would be to open the Scripting tab which can be found along the top of the application to the far right.
 
-<replace with gif>
-
 ![Blender Scripting Workspace](./images/blender-scripting.gif)
 
-This configures Blender into a scripting friendly workspace where you have the following windows:
+This configures Blender into a scripting-friendly workspace where you have the following windows:
 
 - 3D viewport
 

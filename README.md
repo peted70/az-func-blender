@@ -431,12 +431,47 @@ docker exec -it <container name> /bin/bash
 
 ![Docker CLI](./images/docker-cli.gif)
 
-Once ou have a running container
+Once you have a running container then theoretically you can attach the debugger and hit some breakpoints in your Azure Function code. At the time of writing I didn't quite get this to work in VS Code. It starts well by prompting me to attach to running local containers:
+
+![VS Code Attach](./images/vscode-attach.png)
+
+And when I select the appropriate container I am prompted to copy over the remote debugging tools:
+
+![VS Code Copy Remote Debugging Tools](./images/vscode-copy-debug-tools.png)
+
+But this process never quite completes correctly for me:
+
+![VS Code Debug Error Dialog](./images/Debug-error-vscode.png)
+
+I haven't had time yet to investigate further and I switched over to VS2019 for debugging.
+
+> One thing to note here is that you can run these tools in Linux on Windows with WSL2 (Windows Subsystem for Linux). [Here's](https://www.hanselman.com/blog/HowToSetUpDockerWithinWindowsSystemForLinuxWSL2OnWindows10.aspx) a guide by Scott Hanselmann on just that.
+
+![VS Code WSL2](./images/vscode-wsl2.png)
+
+Note the 'little-bit-too' subltle WSL:Ubuntu indicator reminding you that you are running linux!
+
+During development for this project I switched about a bit between Windows/Linux and it can get a little bit confusing. One issue is that when writing code in my Azure function and referencing the file system in the .NET code there I need a good way to work cross-platform. I suspect relative file paths are the way forward but didn't quite get how to access the Blender executable correctly.
 
 #### Deployment to Azure
 
+So, we need to deploy our Azure Function, our Docker image and somehow run a container based ont the image.
+
+##### Azure Function App
+
+##### Docker Hub Continuous Deployment
+
 #### Testing
 
+I mostly used [Postman](https://www.postman.com/) for creating the http requests required for testing the function but any good http client will do and you can even send s test request from the Azure portal. I left supprt for http GET also so I could test from a browser.
+
+![Azure Portal Testing](./images/azure-portal-test-af.png)
+
+And here's similar in Postman 
+
+![Postman POST](./images/postman-post.png)
+
+Notice the little drop-down on the **Send** button for **Send & Download** which I used to download the resulting zip archive.
 
 Consumption Plan vs App Service Plan for Functions
 Azure Functions vs Azure Container Instances

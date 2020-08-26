@@ -1,4 +1,12 @@
-# Azure :heart: Blender
+# Blender in Azure
+
+Blender has been receiving some well-deserved attention recently. In particular some big companies who understand the importance of this 3D content creation tool as we move towards a spatial computing-oriented landscape.
+
+Blender has been hitting the news with some notable additions to the [Blender Development Fund](https://fund.blender.org/)
+
+![Blender Development Fund](./images/blenderdevfund.png)
+
+> Blender has been around for 25 years or so as a free and open source 3D content creation and rendering tool. It has become a cornerstone in the 3D pipeline and it's freeness sets it apart from some of it's competitors. The industry investment is a signal that Blender is a key piece of technology for the future landscape and another indicator that the tipping point for adoption of spatial computing is in the not-too-distant future.  
 
 In this post I will explore running Blender in an Azure function in order to automate elements of a 3D model pipeline in a scalable and cost-effective way. I will provide a code repo of all of the elements required from the Azure Function code to an example Docker file describing the container that we will run the Azure function in to some example Python scripts which allow automation of Blender functionality.
 
@@ -25,12 +33,6 @@ The rest of this post will be concerned with all aspects of setting up a pipelin
 - How can we host the processing in the cloud? We are going to be using the Azure cloud for this.
 
 ## Blender
-
-Blender has been hitting the news a bit recently with some notable additions to the [Blender Development Fund](https://fund.blender.org/)
-
-![Blender Development Fund](./images/blenderdevfund.png)
-
-> Blender has been around for 25 years or so as a free and open source 3D content creation and rendering tool. It has become a cornerstone in the 3D pipeline and it's freeness sets it apart from some of it's competitors. The industry investment is a signal that Blender is a key piece of technology for the future landscape and another indicator that the tipping point for adoption of spatial computing is in the not-too-distant future.  
 
 Blender can be used for 3D modeling, sculpting, creating and applying materials, rendering, character rigging, particle simulation, animation, 2D animation, editing and compositing.
 
@@ -449,17 +451,43 @@ I haven't had time yet to investigate further and I switched over to VS2019 for 
 
 ![VS Code WSL2](./images/vscode-wsl2.png)
 
-Note the 'little-bit-too' subltle WSL:Ubuntu indicator reminding you that you are running linux!
+Note the 'little-bit-too' subtle WSL:Ubuntu indicator reminding you that you are running linux!
 
 During development for this project I switched about a bit between Windows/Linux and it can get a little bit confusing. One issue is that when writing code in my Azure function and referencing the file system in the .NET code there I need a good way to work cross-platform. I suspect relative file paths are the way forward but didn't quite get how to access the Blender executable correctly.
 
 #### Deployment to Azure
 
-So, we need to deploy our Azure Function, our Docker image and somehow run a container based ont the image.
+So, we need to deploy our Azure Function, our Docker image and somehow run a container based on the image.
 
 ##### Azure Function App
 
+I'm going to defer to [this documentation](https://docs.microsoft.com/en-us/azure/azure-functions/functions-create-function-linux-custom-image?tabs=bash%2Cportal&pivots=programming-language-csharp) that I mentioned earlier to help set up an Azure Function App and push your Azure function to it.
+
+I used this command quite a lot:
+
+``` cli
+func azure functionapp publish
+```
+
+and I also used the Azure portal to help me determine when a new function had been published, when a new container image was available and some other developer tools that you can find in the Developer Tools section of your Function App.
+
+They also link to Kudu (which you can access via https://myfunctionapp.scm.azurewebsites.net/) so you can open a shell and access logs, etc.
+
+![Kudu](./images/kudu.png)
+
 ##### Docker Hub Continuous Deployment
+
+As well as running the container locally we can push to a container registry. I'm using Docker Hub but [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/) might be worth consideration also:
+
+![Docker Hub](./images/docker-hub.png)
+
+We can also set this up so that when the Dockerfile in the Github repo changes a new build of the container is kicked off.
+
+![Docker Hub Builds](./images/docker-hub-builds.png)
+
+You can also let your Azure Function App know when there is a new image by configuring a web hook.
+
+![Azure Container Settings](./images/az-func-app-cicd.png)
 
 #### Testing
 
@@ -467,21 +495,24 @@ I mostly used [Postman](https://www.postman.com/) for creating the http requests
 
 ![Azure Portal Testing](./images/azure-portal-test-af.png)
 
-And here's similar in Postman 
+And here's similar in Postman,
 
 ![Postman POST](./images/postman-post.png)
 
 Notice the little drop-down on the **Send** button for **Send & Download** which I used to download the resulting zip archive.
 
-Consumption Plan vs App Service Plan for Functions
-Azure Functions vs Azure Container Instances
-running containers locally, wsl2 and in the cloud.
-So, testing the AF
+> Note that the Input Zip Uri is specified as a SAS uri which helps to control access to the blob and can be configured and created in the [Azure Portal](https://portal.azure.com/)
 
-VS code on WSL2 Ubuntu - filepaths
-debugging issues
+## Further Work
 
-A little bit about WSL:Ubuntu VS code
+I realise that this post in now becoming quite long so I am going to wrap up but I also wanted to include other areas that I would hve like to move onto given the time:
 
+- Cost analysis
 
-<explore cost of running Azure functions - am I using consumption plan or appservice plan and what is the difference.>
+- Scaling analysis
+
+- Azure Functions vs Azure Container Instances
+
+- Extended, useful Blender scripts and an interface to selectively run functionality in those scripts
+
+- Considerations for rendering

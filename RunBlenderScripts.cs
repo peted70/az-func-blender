@@ -161,7 +161,7 @@ namespace AzFuncDocker
             //
             using (var OutputZip = new ZipArchive(stream, ZipArchiveMode.Create, true))
             {
-                OutputZip.CreateEntryFromDirectory(zipDir);
+                OutputZip.CreateEntryFromDirectory(outputDir);
             }
 
             // Rewind

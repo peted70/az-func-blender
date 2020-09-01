@@ -64,7 +64,7 @@ This configures Blender into a scripting-friendly workspace where you have the f
 
 ![Python Templates](./images/python-templates.png)
 
-I'm no going to attempt a tutorial of this as there are many online already but I have included some useful tips.
+I'm not going to attempt a tutorial of this as there are many online already but I have included some useful tips.
 
 #### Visual Studio Code Extension
 
@@ -489,7 +489,7 @@ You can also let your Azure Function App know when there is a new image by confi
 
 #### Testing
 
-I mostly used [Postman](https://www.postman.com/) for creating the http requests required for testing the function but any good http client will do and you can even send s test request from the Azure portal. I left supprt for http GET also so I could test from a browser.
+I mostly used [Postman](https://www.postman.com/) for creating the http requests required for testing the function but any good http client will do and you can even send a test request from the Azure portal. I left support for http GET also so I could test from a browser.
 
 ![Azure Portal Testing](./images/azure-portal-test-af.png)
 
@@ -503,7 +503,7 @@ Notice the little drop-down on the **Send** button for **Send & Download** which
 
 ## Further Work
 
-I realise that this post in now becoming quite long so I am going to wrap up but I also wanted to include other areas that I would hve like to move onto given the time:
+I realise that this post in now becoming quite long so I am going to wrap up but I also wanted to include other areas that I would have liked to have moved onto given the time:
 
 - Cost analysis
 

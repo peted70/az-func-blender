@@ -10,8 +10,6 @@
 		}
 	},
 	"variables": {
-		"repoURL": "https://github.com/peted70/az-func-blender.git",
-		"repoBranch": "master",
 		"functionAppName": "[concat(parameters('appNamePrefix'), '-', substring(uniquestring(resourceGroup().id, deployment().name), 0, 4))]",
 		"storageAccountName": "[concat(uniquestring(resourceGroup().id, deployment().name), 'azfnsg')]"
 	},
@@ -36,8 +34,8 @@
 				"reserved": true
 			},
 			"sku": {
-				"name": "B1",
-				"tier": "Basic"
+				"name": "P1v2",
+				"tier": "Premium"
 			}
 		},
 		{
@@ -60,18 +58,18 @@
 			},
 			"resources": [
 				{
-					"apiVersion": "2016-08-01",
-					"name": "web",
-					"type": "sourcecontrols",
-					"dependsOn": [
+                    "apiVersion": "2016-08-01",
+                    "name": "appsettings",
+                    "type": "config",
+                    "dependsOn": [
 						"[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
-					],
-					"properties": {
-						"repoUrl": "[variables('repoURL')]",
-						"branch": "[variables('repoBranch')]",
-						"IsManualIntegration": true
-					}
-				}
+                    ],
+                    "properties": {
+                        "AzureWebJobsStorage": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+                        "FUNCTIONS_EXTENSION_VERSION": "~3",
+						"WEBSITES_ENABLE_APP_SERVICE_STORAGE": false
+                    }
+                }
 			]
 		}
 	]

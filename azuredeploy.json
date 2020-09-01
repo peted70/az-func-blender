@@ -1,0 +1,76 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"appNamePrefix": {
+			"type": "string",
+			"metadata": {
+				"description": "The name of the function app that you wish to create."
+			}
+		}
+	},
+	"variables": {
+		"functionAppName": "[concat(parameters('appNamePrefix'), '-', substring(uniquestring(resourceGroup().id, deployment().name), 0, 4))]",
+		"storageAccountName": "[concat(uniquestring(resourceGroup().id, deployment().name), 'azfnsg')]"
+	},
+	"resources": [
+		{
+			"type": "Microsoft.Storage/storageAccounts",
+			"name": "[variables('storageAccountName')]",
+			"apiVersion": "2019-04-01",
+			"location": "[resourceGroup().location]",
+			"sku": {
+				"name": "Standard_LRS"
+			}
+		},
+		{
+			"type": "Microsoft.Web/serverfarms",
+			"name": "[variables('functionAppName')]",
+			"apiVersion": "2019-08-01",
+			"location": "[resourceGroup().location]",
+			"kind": "linux",
+			"properties": {
+				"name": "[variables('functionAppName')]",
+				"reserved": true
+			},
+			"sku": {
+				"name": "P1v2",
+				"tier": "Premium"
+			}
+		},
+		{
+			"type": "Microsoft.Web/sites",
+			"name": "[variables('functionAppName')]",
+			"apiVersion": "2019-08-01",
+			"location": "[resourceGroup().location]",
+			"kind": "functionapp,linux,container",
+			"dependsOn": [
+				"[resourceId('Microsoft.Web/serverfarms', variables('functionAppName'))]",
+				"[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+			],
+			"properties": {
+				"serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('functionAppName'))]",
+				"clientAffinityEnabled": false,
+				"siteConfig": {
+					"appCommandLine": "",
+					"linuxFxVersion": "DOCKER|peted70/blender-functions:latest"
+				}
+			},
+			"resources": [
+				{
+                    "apiVersion": "2016-08-01",
+                    "name": "appsettings",
+                    "type": "config",
+                    "dependsOn": [
+						"[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+                    ],
+                    "properties": {
+                        "AzureWebJobsStorage": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+                        "FUNCTIONS_EXTENSION_VERSION": "~3",
+						"WEBSITES_ENABLE_APP_SERVICE_STORAGE": false
+                    }
+                }
+			]
+		}
+	]
+}

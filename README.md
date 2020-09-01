@@ -14,7 +14,7 @@ In this post I will explore running Blender in an Azure function in order to aut
 
 Click the following link the ensure you fill in the parameters according to their descriptions.
 
-<a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fpeted70%2Faz-func-blender%2Fmaster%2azuredeploy.json" target="_blank">
+<a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fpeted70%2Faz-func-blender%2Fmaster%2Fazuredeploy.json" target="_blank">
     <img src="http://azuredeploy.net/deploybutton.png"/>
 
 ## Content Pipeline
